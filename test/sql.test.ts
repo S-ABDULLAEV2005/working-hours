@@ -39,7 +39,7 @@ const payload = (from: string, to: string, days: object[]) => ({
   periodTo: to,
   rowsTotal: 10,
   issuesTotal: 0,
-  employees: [{ employeeId: '313', name: 'Behruzjon Ibragimov', department: 'Agency\\1Ҷ(ҶСК)' }],
+  employees: [{ employeeId: '313', name: 'Тестов Тест', department: 'Agency\\1Ҷ(ҶСК)' }],
   days,
 });
 const day = (date: string, firstIn: number, lastOut: number | null) => ({

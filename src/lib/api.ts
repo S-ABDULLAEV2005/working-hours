@@ -27,6 +27,16 @@ export interface UploadRecord {
   createdAt: string;
 }
 
+export interface PlatformUser {
+  id: string;
+  email: string;
+  fullName: string;
+  role: Role;
+  createdAt: string;
+  lastSignInAt: string | null;
+  isMe: boolean;
+}
+
 export interface Api {
   readonly demo: boolean;
   /** Текущий пользователь или null. Бросает ошибку, если вход есть, а доступа нет. */
@@ -43,6 +53,16 @@ export interface Api {
   importData(fileName: string, data: ImportResult): Promise<number>;
   deleteMonth(month: string): Promise<number>;
   listUploads(): Promise<UploadRecord[]>;
+
+  /** Управление пользователями (только admin). Пароли генерирует сервер и возвращает один раз. */
+  listUsers(): Promise<PlatformUser[]>;
+  createUser(input: { email: string; fullName: string; role: Role }): Promise<{ email: string; password: string }>;
+  setUserRole(userId: string, role: Role): Promise<void>;
+  renameUser(userId: string, fullName: string): Promise<void>;
+  resetUserPassword(userId: string): Promise<string>;
+  deleteUser(userId: string): Promise<void>;
+  /** Смена собственного пароля (любой вошедший пользователь). */
+  changeOwnPassword(newPassword: string): Promise<void>;
 }
 
 /** Ошибка, понятная пользователю: текст можно показывать как есть. */

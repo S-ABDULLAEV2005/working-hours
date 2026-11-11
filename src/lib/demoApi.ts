@@ -1,11 +1,19 @@
 import { DEFAULT_SETTINGS, type DayFacts, type Employee, type ImportResult, type Settings } from '../core';
-import { UserError, type Api, type MonthInfo, type Profile, type UploadRecord } from './api';
+import {
+  UserError,
+  type Api,
+  type MonthInfo,
+  type PlatformUser,
+  type Profile,
+  type Role,
+  type UploadRecord,
+} from './api';
 
 /**
  * Демо-режим: всё хранится в памяти браузера и пропадает при обновлении страницы.
  * Нужен, чтобы посмотреть платформу без Supabase. Включается VITE_DEMO=1.
  */
-const USERS: Record<string, Profile & { password: string }> = {
+const USERS: Record<string, Profile & { password: string; createdAt?: string; lastSignInAt?: string | null }> = {
   'admin@demo': { userId: 'a', email: 'admin@demo', fullName: 'Администратор (демо)', role: 'admin', password: 'demo' },
   'viewer@demo': {
     userId: 'v',
@@ -130,5 +138,77 @@ export class DemoApi implements Api {
   async listUploads() {
     await wait();
     return [...this.uploads];
+  }
+
+  private genPassword() {
+    const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    return Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => a[b % a.length]).join('');
+  }
+  async listUsers(): Promise<PlatformUser[]> {
+    this.requireAdmin();
+    await wait();
+    return Object.values(USERS).map((u) => ({
+      id: u.userId,
+      email: u.email,
+      fullName: u.fullName,
+      role: u.role,
+      createdAt: u.createdAt ?? '2026-11-11T09:00:00Z',
+      lastSignInAt: u.lastSignInAt ?? null,
+      isMe: u.userId === this.me?.userId,
+    }));
+  }
+  async createUser({ email, fullName, role }: { email: string; fullName: string; role: Role }) {
+    this.requireAdmin();
+    await wait(400);
+    const e = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new UserError('Неверный формат email.');
+    if (!fullName.trim()) throw new UserError('Не заполнено поле «ФИО».');
+    if (USERS[e]) throw new UserError('Пользователь с таким email уже существует.');
+    const password = this.genPassword();
+    USERS[e] = {
+      userId: crypto.randomUUID(),
+      email: e,
+      fullName: fullName.trim(),
+      role,
+      password,
+      createdAt: new Date().toISOString(),
+    };
+    return { email: e, password };
+  }
+  private byId(id: string) {
+    const u = Object.values(USERS).find((x) => x.userId === id);
+    if (!u) throw new UserError('Пользователь не найден.');
+    if (u.userId === this.me?.userId) throw new UserError('Это действие нельзя выполнить со своей учётной записью.');
+    return u;
+  }
+  async setUserRole(id: string, role: Role) {
+    this.requireAdmin();
+    await wait();
+    this.byId(id).role = role;
+  }
+  async renameUser(id: string, fullName: string) {
+    this.requireAdmin();
+    await wait();
+    const u = Object.values(USERS).find((x) => x.userId === id);
+    if (u) u.fullName = fullName.trim();
+  }
+  async resetUserPassword(id: string) {
+    this.requireAdmin();
+    await wait(300);
+    const u = this.byId(id);
+    u.password = this.genPassword();
+    return u.password;
+  }
+  async deleteUser(id: string) {
+    this.requireAdmin();
+    await wait(300);
+    delete USERS[this.byId(id).email];
+  }
+  async changeOwnPassword(newPassword: string) {
+    await wait(300);
+    if (!this.me) throw new UserError('Войдите заново.');
+    const u = USERS[this.me.email];
+    if (u.password === newPassword) throw new UserError('Новый пароль должен отличаться от старого.');
+    u.password = newPassword;
   }
 }

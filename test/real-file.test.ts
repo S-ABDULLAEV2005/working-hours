@@ -22,7 +22,7 @@ describe.skipIf(!existsSync(FILE))('реальная выгрузка FaceID (т
     expect(oct).toHaveLength(191);
     expect(oct.reduce((a, m) => a + m.lateCount, 0)).toBe(1297);
 
-    // Сверено вручную с пользователем: Behruzjon Ibragimov, ID 313
+    // Сверено вручную с ответственным: сотрудник ID 313
     expect(oct.find((m) => m.employeeId === '313')).toMatchObject({
       daysPresent: 24,
       minutesPresent: 178 * 60 + 59,
@@ -30,7 +30,7 @@ describe.skipIf(!existsSync(FILE))('реальная выгрузка FaceID (т
       minutesLate: 24 * 60 + 28,
       singleEventDays: 1,
     });
-    // Shuhrat Soliev, ID 299 — две одиночные отметки, опозданий нет
+    // Сотрудник ID 299 — две одиночные отметки, опозданий нет
     expect(oct.find((m) => m.employeeId === '299')).toMatchObject({
       daysPresent: 2,
       minutesPresent: 0,

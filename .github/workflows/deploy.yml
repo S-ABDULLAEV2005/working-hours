@@ -1,6 +1,6 @@
 # Сборка и публикация сайта на GitHub Pages при каждом push в main.
 # Если тесты не прошли или не заданы Secrets — сайт НЕ обновится (старая версия останется рабочей).
-name: Deploy
+name: Deploy to GitHub Pages
 
 on:
   push:

@@ -207,8 +207,8 @@ describe('расчёт дня', () => {
   });
   it('разные ID с одинаковым ФИО — разные сотрудники', () => {
     const r = run([
-      row('2026-10-05 08:00:00', '276', 'Agency\\Main', 'Хаитова Мадина'),
-      row('2026-10-05 08:00:00', '318', 'Agency\\Main', 'Хаитова Мадина'),
+      row('2026-10-05 08:00:00', '276', 'Agency\\Main', 'Одинаков Однофамилец'),
+      row('2026-10-05 08:00:00', '318', 'Agency\\Main', 'Одинаков Однофамилец'),
     ]);
     expect(r.employees.size).toBe(2);
   });
@@ -259,5 +259,19 @@ describe('утилиты', () => {
     expect(duration(0)).toBe('0 мин');
     expect(duration(65)).toBe('1 ч 05 мин');
     expect(duration(120)).toBe('2 ч');
+  });
+});
+
+import { normalizeSupabaseUrl } from '../src/lib/client';
+describe('адрес Supabase', () => {
+  it('убирает /rest/v1, слеши и кавычки', () => {
+    for (const v of [
+      'https://abc.supabase.co',
+      'https://abc.supabase.co/',
+      'https://abc.supabase.co/rest/v1/',
+      ' "https://abc.supabase.co/rest/v1" ',
+    ])
+      expect(normalizeSupabaseUrl(v)).toBe('https://abc.supabase.co');
+    expect(normalizeSupabaseUrl('abc')).toBeUndefined();
   });
 });

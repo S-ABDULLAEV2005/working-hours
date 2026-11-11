@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useSearchParams } from 'react-router';
 import clsx from 'clsx';
-import { CalendarRange, FileUp, History, LogOut, Settings2 } from 'lucide-react';
+import { CalendarRange, FileUp, History, KeyRound, LogOut, Settings2, Users } from 'lucide-react';
+import { ChangePasswordDialog } from './ChangePasswordDialog';
 import { useAuth, useIsAdmin } from '../lib/auth';
 
 export function Mark({ className }: { className?: string }) {
@@ -25,6 +27,7 @@ export function AppShell() {
   const { profile, api } = useAuth();
   const admin = useIsAdmin();
   const [params] = useSearchParams();
+  const [pwOpen, setPwOpen] = useState(false);
   const m = params.get('m');
   const keep = m ? `?m=${m}` : '';
 
@@ -33,6 +36,7 @@ export function AppShell() {
     { to: '/upload', label: 'Загрузка файла', icon: FileUp, show: admin },
     { to: '/history', label: 'История загрузок', icon: History, show: admin },
     { to: '/settings', label: 'Настройки графика', icon: Settings2, show: admin },
+    { to: '/users', label: 'Пользователи', icon: Users, show: admin },
   ].filter((n) => n.show);
 
   const link = ({ isActive }: { isActive: boolean }) =>
@@ -56,13 +60,22 @@ export function AppShell() {
                 <p className="text-xs text-muted">по камерам FaceID</p>
               </div>
             </div>
-            <button
-              onClick={() => api.signOut()}
-              className="rounded-md p-2 text-muted hover:bg-hover hover:text-ink lg:hidden"
-              aria-label="Выйти"
-            >
-              <LogOut className="size-4" />
-            </button>
+            <div className="flex lg:hidden">
+              <button
+                onClick={() => setPwOpen(true)}
+                className="rounded-md p-2 text-muted hover:bg-hover hover:text-ink"
+                aria-label="Сменить пароль"
+              >
+                <KeyRound className="size-4" />
+              </button>
+              <button
+                onClick={() => api.signOut()}
+                className="rounded-md p-2 text-muted hover:bg-hover hover:text-ink"
+                aria-label="Выйти"
+              >
+                <LogOut className="size-4" />
+              </button>
+            </div>
           </div>
           <nav className="flex gap-1 overflow-x-auto px-3 pb-2 lg:flex-col lg:px-3 lg:pb-0" aria-label="Разделы">
             {nav.map((n) => (
@@ -78,18 +91,27 @@ export function AppShell() {
             </p>
             <p className="text-xs text-muted">{admin ? 'Администратор' : 'Только просмотр'}</p>
             {api.demo && <p className="mt-2 text-xs text-single">Демо-режим: данные не сохраняются</p>}
-            <button
-              onClick={() => api.signOut()}
-              className="mt-3 -ml-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-ink"
-            >
-              <LogOut className="size-4" aria-hidden /> Выйти
-            </button>
+            <div className="mt-3 -ml-2 flex flex-col items-start">
+              <button
+                onClick={() => setPwOpen(true)}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-ink"
+              >
+                <KeyRound className="size-4" aria-hidden /> Сменить пароль
+              </button>
+              <button
+                onClick={() => api.signOut()}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-ink"
+              >
+                <LogOut className="size-4" aria-hidden /> Выйти
+              </button>
+            </div>
           </div>
         </div>
       </aside>
       <main id="main" className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
         <Outlet />
       </main>
+      <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
     </div>
   );
 }

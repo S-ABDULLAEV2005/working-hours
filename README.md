@@ -4,7 +4,7 @@
 
 - **Сайт:** React + TypeScript, публикуется на GitHub Pages (бесплатно).
 - **База и вход:** Supabase (бесплатный тариф).
-- **Роли:** `admin` — загрузка файлов, настройки, удаление; `viewer` — только просмотр. Публичной регистрации нет.
+- **Роли:** `admin` — загрузка файлов, настройки, удаление, управление пользователями; `viewer` — только просмотр. Публичной регистрации нет.
 
 ---
 
@@ -35,9 +35,9 @@
 2. **New project.** Регион — ближайший к Таджикистану (например, Frankfurt). Сохраните пароль базы.
 3. **SQL Editor → New query** → вставьте содержимое `supabase/migrations/001_init.sql` → **Run**.
 4. **Отключите регистрацию:** Authentication → Sign In / Providers → выключите *Allow new users to sign up*. Даже если её забыть выключить, посторонний ничего не увидит (доступ выдаётся только через таблицу `profiles`), но лучше выключить.
-5. **Создайте пользователей:** Authentication → Users → *Add user → Create new user* (email + пароль, включите *Auto Confirm User*).
-6. **Выдайте роли:** откройте `supabase/manage_users.sql`, подставьте email и имя, выполните в SQL Editor.
-7. **Ключи:** Project Settings → API (или API Keys). Нужны *Project URL* и *anon / publishable key*.
+5. **Создайте первого администратора** (себя): Authentication → Users → *Add user → Create new user* (email + пароль, включите *Auto Confirm User*).
+6. **Выдайте ему роль admin:** откройте `supabase/manage_users.sql`, подставьте email и имя, выполните первый блок в SQL Editor. Остальных пользователей администратор потом создаёт прямо на сайте (раздел «Управление пользователями» ниже).
+7. **Ключи:** кнопка **Connect** вверху проекта, или Project Settings → **API Keys** → *Publishable key* (`sb_publishable_…`); старый вариант — вкладка *Legacy API Keys* → `anon`. URL проекта — Project Settings → **Data API** → *Project URL*.
    ⚠️ Ключ `service_role` / `secret` **никогда** не вставляйте в сайт и в GitHub.
 
 ### 2. Проверка на своём компьютере
@@ -50,24 +50,56 @@ npm run demo                    # то же, но без базы, с данны
 npm test                        # все тесты
 ```
 
-### 3. Публикация на GitHub Pages
+### 3. Загрузка кода на GitHub
 
-1. Создайте репозиторий на GitHub и загрузите туда проект (`git push`). Excel-файлы в репозиторий не попадут — они в `.gitignore`.
-2. **Settings → Secrets and variables → Actions → New repository secret:**
+Для бесплатного GitHub Pages репозиторий должен быть **публичным**: код увидят все. Это безопасно, пока в репозиторий не попали данные и секреты — `.gitignore` исключает `.xlsx`, `fixtures/` и `.env.local`, но проверьте `git status` перед коммитом.
+
+```powershell
+git init
+git add .
+git status        # в списке НЕ должно быть .xlsx, fixtures и .env.local
+git commit -m "Первая версия платформы"
+git branch -M main
+git remote add origin https://github.com/<логин>/<репозиторий>.git
+git push -u origin main
+```
+
+### 4. Публикация на GitHub Pages
+
+1. Репозиторий → **Settings → Secrets and variables → Actions → New repository secret**:
    - `VITE_SUPABASE_URL` — Project URL
    - `VITE_SUPABASE_ANON_KEY` — anon / publishable key
-3. **Settings → Pages → Source: GitHub Actions.**
-4. **Actions → Deploy → Run workflow** (или любой push в `main`). Через 1–2 минуты сайт будет по адресу `https://<логин>.github.io/<репозиторий>/`.
-5. Если тесты не прошли или Secrets не заданы, публикация остановится, и старая версия сайта останется рабочей.
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+3. **Actions → Deploy to GitHub Pages → Run workflow** (дальше публикация идёт сама после каждого `git push` в `main`).
+4. Через 1–2 минуты сайт будет по адресу `https://<логин>.github.io/<репозиторий>/`.
+5. Если тесты не прошли или Secrets не заданы, публикация остановится, а старая версия сайта останется рабочей.
 
-### 4. Чтобы база не засыпала (обязательно)
+### Управление пользователями (установить один раз)
+
+Чтобы администратор мог сам добавлять людей на сайте (раздел **«Пользователи»**), в Supabase нужна серверная функция `admin-users`. Секретный ключ хранится только в ней и никогда не попадает в браузер.
+
+1. Supabase → слева **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. Имя функции: **`admin-users`** (ровно так).
+3. Удалите пример кода и вставьте целиком содержимое файла `supabase/functions/admin-users/index.ts` → **Deploy function**.
+4. Откройте функцию → **Details** (или Settings) → выключите **Verify JWT / Enforce JWT verification** → **Save**.
+   Это безопасно: функция сама проверяет, что запрос пришёл от вошедшего администратора, и отклоняет всех остальных.
+5. ✅ На сайте под администратором откройте **«Пользователи»** — должен появиться список.
+
+Что умеет администратор на этой странице: создать пользователя (пароль генерируется и показывается один раз), сменить роль, выдать новый пароль, удалить доступ. Себя удалить или понизить нельзя — платформа не останется без администратора. Каждый пользователь может сменить свой пароль: меню слева → **«Сменить пароль»**.
+
+Если на странице «Пользователи» ошибка:
+- «Функция управления пользователями не установлена» — пункты 1–3;
+- «включена проверка JWT» — пункт 4;
+- при смене своего пароля просит повторный вход — в Supabase Authentication → Providers → Email выключите *Secure password change* или выйдите и войдите снова.
+
+### 5. Чтобы база не засыпала (обязательно)
 
 Бесплатный проект Supabase ставится на паузу после 7 дней без запросов.
 
 1. **Основной способ — [cron-job.org](https://cron-job.org)** (бесплатно): создайте задание раз в 3 дня:
    - URL: `https://<ваш-проект>.supabase.co/rest/v1/health?select=ok`
-   - Headers: `apikey: <anon key>` и `Authorization: Bearer <anon key>`
-2. **Запасной:** workflow `Keep Supabase awake` в этом репозитории запускается сам раз в 3 дня. GitHub отключает его, если в репозитории 60 дней не было коммитов, поэтому он только запасной.
+   - Header: `apikey: <ваш publishable / anon key>` (только этот заголовок)
+2. **Запасной:** workflow `Keep Supabase awake` запускается сам раз в 3 дня (использует те же Secrets). GitHub отключает его, если в репозитории 60 дней не было коммитов, поэтому он только запасной.
 3. Если база всё же уснула: Supabase → проект → **Resume project**. Данные сохраняются.
 
 ---
@@ -97,8 +129,8 @@ npm test                        # все тесты
 src/core/          расчёт: разбор Excel, приход/уход, опоздания, итоги (без UI, покрыт тестами)
 src/lib/           подключение к Supabase, демо-режим, экспорт в Excel
 src/pages/         страницы: табель, сотрудник, загрузка, история, настройки, вход
-supabase/          SQL: таблицы, права доступа, функции загрузки; выдача ролей
-test/              тесты расчёта, тесты базы и прав доступа (настоящий Postgres в памяти)
+supabase/          SQL: таблицы, права доступа, функции загрузки; выдача ролей; функция admin-users
+test/              тесты расчёта, базы и прав доступа (настоящий Postgres в памяти), функции admin-users
 .github/workflows/ публикация на Pages, пинг базы
 ```
 

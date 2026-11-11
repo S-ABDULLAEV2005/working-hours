@@ -12,6 +12,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { LoginPage } from './pages/LoginPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { UploadPage } from './pages/UploadPage';
+import { UsersPage } from './pages/UsersPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +58,14 @@ export default function App() {
                     element={
                       <AdminOnly>
                         <SettingsPage />
+                      </AdminOnly>
+                    }
+                  />
+                  <Route
+                    path="users"
+                    element={
+                      <AdminOnly>
+                        <UsersPage />
                       </AdminOnly>
                     }
                   />

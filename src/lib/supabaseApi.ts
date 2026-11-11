@@ -1,6 +1,21 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+  createClient,
+  type SupabaseClient,
+} from '@supabase/supabase-js';
 import { normalizeSettings, type DayFacts, type Employee, type ImportResult, type Settings } from '../core';
-import { NoAccessError, UserError, type Api, type MonthInfo, type Profile, type UploadRecord } from './api';
+import {
+  NoAccessError,
+  UserError,
+  type Api,
+  type MonthInfo,
+  type PlatformUser,
+  type Profile,
+  type Role,
+  type UploadRecord,
+} from './api';
 
 const PAGE = 1000; // Supabase отдаёт не больше 1000 строк за запрос — читаем страницами.
 
@@ -11,6 +26,11 @@ function friendly(error: { message?: string; code?: string } | null): never {
   }
   if (error?.code === '42501' || /только администратор|permission denied/i.test(msg)) {
     throw new UserError('Недостаточно прав для этого действия.');
+  }
+  if (/Invalid path specified|Invalid API key|No API key found/i.test(msg)) {
+    throw new UserError(
+      'Сайт неверно подключён к базе: проверьте адрес и ключ Supabase в настройках (.env.local или Secrets).',
+    );
   }
   if (/Invalid login credentials/i.test(msg)) throw new UserError('Неверный email или пароль.');
   if (/Email not confirmed/i.test(msg)) throw new UserError('Email не подтверждён. Обратитесь к администратору.');
@@ -166,5 +186,68 @@ export class SupabaseApi implements Api {
       uploadedByName: r.uploaded_by_name,
       createdAt: r.created_at,
     }));
+  }
+
+  /** Вызов серверной функции admin-users с понятными ошибками. */
+  private async users<T>(body: Record<string, unknown>): Promise<T> {
+    const { data, error } = await this.sb.functions.invoke('admin-users', { body });
+    if (error) {
+      if (error instanceof FunctionsHttpError) {
+        const status = error.context?.status;
+        let msg = '';
+        try {
+          msg = (await error.context.json())?.error ?? '';
+        } catch {
+          /* ответ не JSON */
+        }
+        if (status === 404 && !msg) {
+          throw new UserError(
+            'Функция управления пользователями не установлена в Supabase. См. README, раздел «Управление пользователями».',
+          );
+        }
+        if (status === 401 && /Invalid JWT|jwt/i.test(msg || error.message)) {
+          throw new UserError(
+            'В настройках функции admin-users включена проверка JWT. Выключите «Verify JWT» (см. README).',
+          );
+        }
+        throw new UserError(msg || 'Сервер отклонил запрос.');
+      }
+      if (error instanceof FunctionsFetchError || error instanceof FunctionsRelayError) {
+        throw new UserError(
+          'Не удалось связаться с функцией управления пользователями. Проверьте, что она установлена (README) и есть интернет.',
+        );
+      }
+      friendly(error);
+    }
+    return data as T;
+  }
+
+  async listUsers(): Promise<PlatformUser[]> {
+    return (await this.users<{ users: PlatformUser[] }>({ action: 'list' })).users;
+  }
+  async createUser(input: { email: string; fullName: string; role: Role }) {
+    return this.users<{ email: string; password: string }>({ action: 'create', ...input });
+  }
+  async setUserRole(userId: string, role: Role) {
+    await this.users({ action: 'setRole', userId, role });
+  }
+  async renameUser(userId: string, fullName: string) {
+    await this.users({ action: 'rename', userId, fullName });
+  }
+  async resetUserPassword(userId: string) {
+    return (await this.users<{ password: string }>({ action: 'resetPassword', userId })).password;
+  }
+  async deleteUser(userId: string) {
+    await this.users({ action: 'delete', userId });
+  }
+  async changeOwnPassword(newPassword: string) {
+    const { error } = await this.sb.auth.updateUser({ password: newPassword });
+    if (error) {
+      if (/different from the old|same/i.test(error.message))
+        throw new UserError('Новый пароль должен отличаться от старого.');
+      if (/weak|short|at least/i.test(error.message))
+        throw new UserError('Пароль слишком простой. Используйте не меньше 10 символов, буквы и цифры.');
+      friendly(error);
+    }
   }
 }
