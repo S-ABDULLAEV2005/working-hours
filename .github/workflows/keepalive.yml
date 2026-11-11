@@ -1,0 +1,21 @@
+# Запасной «пинг» базы, чтобы бесплатный проект Supabase не засыпал (пауза после 7 дней без активности).
+# Основной пинг — cron-job.org (см. README): GitHub отключает расписание, если в репозитории 60 дней не было коммитов.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 6 */3 * *' # раз в 3 дня
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping
+        env:
+          URL: ${{ secrets.VITE_SUPABASE_URL }}
+          KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/health?select=ok" -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "HTTP $code"
+          test "$code" = "200"

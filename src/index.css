@@ -1,0 +1,68 @@
+@import '@fontsource-variable/golos-text';
+@import 'tailwindcss';
+
+/* Палитра: «чернила печати» на холодной бумаге. Красный — как правка корректора. */
+@theme {
+  --font-sans: 'Golos Text Variable', system-ui, sans-serif;
+
+  --color-paper: #f5f6fa;
+  --color-surface: #ffffff;
+  --color-ink: #1a1d2b;
+  --color-muted: #646a80;
+  --color-faint: #9aa0b4;
+  --color-rule: #e2e5ee;
+  --color-hover: #f0f1f8;
+
+  --color-stamp: #3a3e9c;
+  --color-stamp-soft: #e9eaf7;
+  --color-stamp-deep: #2a2d78;
+
+  --color-late: #c2372e;
+  --color-late-soft: #fbe9e7;
+  --color-single: #d69a1a;
+  --color-single-soft: #fdf3dc;
+  --color-ok: #2f7d55;
+  --color-ok-soft: #e4f3ea;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-paper text-ink font-sans text-[15px] leading-6;
+    font-feature-settings: 'tnum' 1;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-stamp);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: var(--color-stamp-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tabel-cell {
+  animation: rise 0.35s both;
+}
