@@ -78,6 +78,8 @@ export const DICT = {
     'Кормандон бо рақами FaceID ворид мешаванд, масалан 313',
   ],
   'login.password': ['Пароль', 'Password', 'Рамз'],
+  'login.showPassword': ['Показать пароль', 'Show password', 'Нишон додани рамз'],
+  'login.hidePassword': ['Скрыть пароль', 'Hide password', 'Пинҳон кардани рамз'],
   'login.submit': ['Войти', 'Sign in', 'Ворид шудан'],
   'login.errEmpty': ['Введите логин и пароль.', 'Enter login and password.', 'Логин ва рамзро ворид кунед.'],
   'login.errEmail': [

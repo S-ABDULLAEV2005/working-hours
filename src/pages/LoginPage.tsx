@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Mark } from '../components/AppShell';
 import { LangSwitch } from '../components/LangSwitch';
 import { Button, Notice } from '../components/ui';
@@ -14,6 +15,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Вход прошёл, но профиль не прочитался (нет доступа, база не обновлена, нет сети) — показываем причину, а не вечную загрузку.
   useEffect(() => {
@@ -92,14 +94,25 @@ export function LoginPage() {
               <label className="mt-4 block text-sm font-medium" htmlFor="password">
                 {t('login.password')}
               </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={field}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`${field} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                  title={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                  className="absolute top-1.5 right-0 grid h-10 w-10 place-items-center rounded-md text-muted hover:text-ink"
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {error && (
                 <p role="alert" className="mt-3 text-sm text-late">
                   {error}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { Eye, EyeOff, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useErrorText, useI18n } from '../i18n';
 import { useApi } from '../lib/auth';
@@ -23,6 +23,7 @@ export function ChangePasswordDialog({
   const [pw2, setPw2] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
     const d = ref.current;
@@ -31,6 +32,7 @@ export function ChangePasswordDialog({
       setPw('');
       setPw2('');
       setError(null);
+      setShow(false);
       d.showModal();
     }
     if (!open && d.open) d.close();
@@ -80,26 +82,32 @@ export function ChangePasswordDialog({
         <label className="block text-sm font-medium" htmlFor="np1">
           {t('pw.new')}
         </label>
-        <input
-          id="np1"
-          type="password"
-          autoComplete="new-password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          className={field}
-        />
+        <div className="relative">
+          <input
+            id="np1"
+            type={show ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            className={`${field} pr-10`}
+          />
+          <EyeButton show={show} onToggle={() => setShow((x) => !x)} />
+        </div>
         <p className="mt-1 text-xs text-muted">{t('pw.rules')}</p>
         <label className="mt-4 block text-sm font-medium" htmlFor="np2">
           {t('pw.repeat')}
         </label>
-        <input
-          id="np2"
-          type="password"
-          autoComplete="new-password"
-          value={pw2}
-          onChange={(e) => setPw2(e.target.value)}
-          className={field}
-        />
+        <div className="relative">
+          <input
+            id="np2"
+            type={show ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={pw2}
+            onChange={(e) => setPw2(e.target.value)}
+            className={`${field} pr-10`}
+          />
+          <EyeButton show={show} onToggle={() => setShow((x) => !x)} />
+        </div>
         {error && (
           <p role="alert" className="mt-3 text-sm text-late">
             {error}
@@ -117,5 +125,22 @@ export function ChangePasswordDialog({
         </div>
       </form>
     </dialog>
+  );
+}
+
+/** Глазок внутри поля пароля. Один на оба поля: нажатие показывает или скрывает оба сразу. */
+function EyeButton({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+  const { t } = useI18n();
+  const label = show ? t('login.hidePassword') : t('login.showPassword');
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={label}
+      title={label}
+      className="absolute top-1.5 right-0 grid h-10 w-10 place-items-center rounded-md text-muted hover:text-ink"
+    >
+      {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+    </button>
   );
 }
