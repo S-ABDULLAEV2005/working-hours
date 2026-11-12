@@ -6,10 +6,11 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ImportResult } from '../core';
 import { Button, Notice, PageHeader, Panel } from '../components/ui';
+import { useErrorText, useI18n } from '../i18n';
 import { useApi } from '../lib/auth';
 import { useMonths } from '../lib/data';
 import { readAttendanceFile } from '../lib/excel';
-import { dateShort, monthTitle, plural } from '../lib/format';
+import { dateShort } from '../lib/format';
 
 type State =
   | { step: 'idle' }
@@ -23,6 +24,8 @@ export function UploadPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const months = useMonths();
+  const { t } = useI18n();
+  const errText = useErrorText();
   const input = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<State>({ step: 'idle' });
   const [drag, setDrag] = useState(false);
@@ -34,7 +37,7 @@ export function UploadPage() {
       const result = await readAttendanceFile(file);
       setState({ step: 'preview', file, result });
     } catch (e) {
-      setState({ step: 'error', message: (e as Error).message });
+      setState({ step: 'error', message: errText(e) });
     } finally {
       if (input.current) input.current.value = '';
     }
@@ -53,14 +56,13 @@ export function UploadPage() {
     try {
       await api.importData(file.name, result);
       await qc.invalidateQueries();
-      const last = result.period.months[result.period.months.length - 1];
-      toast.success('Файл загружен', {
-        description: `Данные за ${dateShort(result.period.from)} – ${dateShort(result.period.to)} обновлены.`,
+      toast.success(t('up.done'), {
+        description: t('up.doneHint', { from: dateShort(result.period.from), to: dateShort(result.period.to) }),
       });
-      navigate(`/?m=${last}`);
+      navigate(`/today?d=${result.period.to}`);
     } catch (e) {
       setState({ step: 'preview', file, result });
-      toast.error('Файл не загружен', { description: `${(e as Error).message} Данные в базе не изменились.` });
+      toast.error(t('up.failed'), { description: `${errText(e)} ${t('up.failedHint')}` });
     }
   };
 
@@ -68,10 +70,7 @@ export function UploadPage() {
 
   return (
     <div className="mx-auto max-w-[860px]">
-      <PageHeader title="Загрузка файла">
-        Выгрузка из системы камер FaceID в формате .xlsx. Файл можно загружать за любой период — данные за эти даты
-        заменятся.
-      </PageHeader>
+      <PageHeader title={t('nav.upload')}>{t('up.subtitle')}</PageHeader>
 
       {(state.step === 'idle' || state.step === 'error' || state.step === 'reading') && (
         <>
@@ -90,17 +89,15 @@ export function UploadPage() {
             <UploadCloud className="mx-auto size-10 text-stamp" aria-hidden />
             {state.step === 'reading' ? (
               <p className="mt-4 font-medium" role="status">
-                Читаю «{state.file.name}»…
-                <span className="mt-1 block text-sm font-normal text-muted">
-                  Большой файл обрабатывается до 10–20 секунд.
-                </span>
+                {t('up.reading', { name: state.file.name })}
+                <span className="mt-1 block text-sm font-normal text-muted">{t('up.readingHint')}</span>
               </p>
             ) : (
               <>
-                <p className="mt-4 text-lg font-medium">Перетащите файл сюда</p>
-                <p className="mt-1 text-sm text-muted">или</p>
+                <p className="mt-4 text-lg font-medium">{t('up.drop')}</p>
+                <p className="mt-1 text-sm text-muted">{t('up.or')}</p>
                 <Button variant="primary" className="mt-3" onClick={() => input.current?.click()}>
-                  Выбрать файл
+                  {t('up.choose')}
                 </Button>
               </>
             )}
@@ -110,17 +107,40 @@ export function UploadPage() {
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="sr-only"
               onChange={(e) => void pick(e.target.files?.[0])}
-              aria-label="Файл Excel"
+              aria-label={t('up.choose')}
             />
           </div>
           {state.step === 'error' && (
             <div className="mt-4">
-              <Notice tone="error" title="Файл не принят">
+              <Notice tone="error" title={t('up.rejected')}>
                 {state.message}
               </Notice>
             </div>
           )}
-          <Requirements />
+          <div className="mt-8 grid gap-6 text-sm sm:grid-cols-2">
+            <div>
+              <h2 className="font-semibold">{t('up.whichFile')}</h2>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+                <li>{t('up.req1')}</li>
+                <li>{t('up.req2')}</li>
+                <li>{t('up.req3')}</li>
+                <li>{t('up.req4')}</li>
+              </ul>
+            </div>
+            <div>
+              <h2 className="font-semibold">{t('up.whatHappens')}</h2>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+                <li>{t('up.what1')}</li>
+                <li>{t('up.what2')}</li>
+                <li>{t('up.what3')}</li>
+              </ul>
+              <p className="mt-3 text-muted">
+                <Link to="/settings" className="text-stamp underline underline-offset-2">
+                  {t('nav.settings')}
+                </Link>
+              </p>
+            </div>
+          </div>
         </>
       )}
 
@@ -153,14 +173,16 @@ function Preview({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const { t, f } = useI18n();
   const replaced = r.period.months.filter((m) => existing.has(m));
+  const w = r.warnings;
   const facts: [string, string][] = [
-    ['Период', `${dateShort(r.period.from)} – ${dateShort(r.period.to)}`],
-    ['Месяцы', r.period.months.map(monthTitle).join(', ')],
-    ['Сотрудников', r.employees.length.toLocaleString('ru-RU')],
-    ['Рабочих дней (сотрудник × день)', r.days.length.toLocaleString('ru-RU')],
-    ['Строк в файле', r.totalRows.toLocaleString('ru-RU')],
-    ['Повторных отметок объединено', r.duplicatesRemoved.toLocaleString('ru-RU')],
+    [t('up.period'), `${dateShort(r.period.from)} – ${dateShort(r.period.to)}`],
+    [t('up.months'), r.period.months.map(f.monthTitle).join(', ')],
+    [t('up.employees'), f.num(r.employees.length)],
+    [t('up.days'), f.num(r.days.length)],
+    [t('up.rows'), f.num(r.totalRows)],
+    [t('up.dups'), f.num(r.duplicatesRemoved)],
   ];
   return (
     <Panel>
@@ -168,7 +190,7 @@ function Preview({
         <FileSpreadsheet className="size-6 shrink-0 text-ok" aria-hidden />
         <div className="min-w-0">
           <p className="truncate font-medium">{file.name}</p>
-          <p className="text-sm text-muted">Проверьте данные перед загрузкой</p>
+          <p className="text-sm text-muted">{t('up.check')}</p>
         </div>
       </div>
       <dl className="grid gap-x-8 gap-y-3 px-6 py-5 sm:grid-cols-2">
@@ -180,73 +202,56 @@ function Preview({
         ))}
       </dl>
       <div className="space-y-3 px-6 pb-5">
+        {(w.sameIdDifferentNames.length > 0 || w.sameNameDifferentIds.length > 0) && (
+          <Notice tone="warn" title={t('up.identityTitle')}>
+            <p className="mb-2">{t('up.identityHint')}</p>
+            <ul className="max-h-56 space-y-1 overflow-auto">
+              {w.sameIdDifferentNames.map((x) => (
+                <li key={`id-${x.employeeId}`}>
+                  <span className="font-medium">{t('up.sameId', { id: x.employeeId })}</span> {x.names.join(' / ')}
+                </li>
+              ))}
+              {w.sameNameDifferentIds.map((x) => (
+                <li key={`n-${x.name}`}>
+                  <span className="font-medium">{t('up.sameName', { name: x.name })}</span> ID{' '}
+                  {x.employeeIds.join(', ')}
+                </li>
+              ))}
+            </ul>
+          </Notice>
+        )}
         {replaced.length > 0 && (
           <Notice
             tone="warn"
-            title={`Данные за ${dateShort(r.period.from)} – ${dateShort(r.period.to)} будут заменены`}
+            title={t('up.replaceTitle', { from: dateShort(r.period.from), to: dateShort(r.period.to) })}
           >
-            В базе уже есть {replaced.map((m) => monthTitle(m).toLowerCase()).join(', ')}. Всё, что попадает в период
-            этого файла, перезапишется. Даты за пределами периода не изменятся.
+            {t('up.replaceHint', { months: replaced.map((m) => f.monthLower(m)).join(', ') })}
           </Notice>
         )}
         {r.issues.length > 0 ? (
-          <Notice
-            tone="warn"
-            title={`${r.issues.length} ${plural(r.issues.length, 'строка пропущена', 'строки пропущены', 'строк пропущено')}`}
-          >
+          <Notice tone="warn" title={t('up.skipped', { n: r.issues.length })}>
             <ul className="mt-1 max-h-48 space-y-0.5 overflow-auto">
               {r.issues.slice(0, 100).map((i) => (
                 <li key={i.row}>
-                  Строка {i.row}: {i.message}
+                  {t('up.row', { n: i.row })}: {i.message}
                 </li>
               ))}
-              {r.issues.length > 100 && <li>…и ещё {r.issues.length - 100}</li>}
             </ul>
           </Notice>
         ) : (
-          <Notice tone="ok" title="Ошибок в файле нет">
-            Все строки распознаны.
+          <Notice tone="ok" title={t('up.noErrors')}>
+            {t('up.noErrorsHint')}
           </Notice>
         )}
       </div>
       <div className="flex flex-wrap justify-end gap-2 border-t border-rule px-6 py-4">
         <Button onClick={onCancel} disabled={saving}>
-          Выбрать другой файл
+          {t('up.another')}
         </Button>
         <Button variant="primary" onClick={onSave} loading={saving}>
-          {saving ? 'Загружаю…' : 'Загрузить в базу'}
+          {saving ? t('up.saving') : t('up.save')}
         </Button>
       </div>
     </Panel>
-  );
-}
-
-function Requirements() {
-  return (
-    <div className="mt-8 grid gap-6 text-sm sm:grid-cols-2">
-      <div>
-        <h2 className="font-semibold">Какой файл подходит</h2>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
-          <li>Выгрузка событий из системы FaceID, формат .xlsx</li>
-          <li>Колонки «Время», «Ид. польз.», «Имя», «Раздел», «Имя устройства посещения»</li>
-          <li>Порядок колонок и строк не важен, лишние колонки игнорируются</li>
-        </ul>
-      </div>
-      <div>
-        <h2 className="font-semibold">Что произойдёт</h2>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
-          <li>Файл читается прямо в браузере, на сервер уходят только итоги по дням</li>
-          <li>Фотографии и пути к ним не сохраняются</li>
-          <li>Если загрузка прервётся, данные в базе останутся прежними</li>
-        </ul>
-        <p className="mt-3 text-muted">
-          Правила расчёта — в разделе{' '}
-          <Link to="/settings" className="text-stamp underline underline-offset-2">
-            Настройки графика
-          </Link>
-          .
-        </p>
-      </div>
-    </div>
   );
 }

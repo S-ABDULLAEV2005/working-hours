@@ -1,4 +1,4 @@
-import type { ImportRules, Settings } from './types';
+import type { Holiday, ImportRules, Settings } from './types';
 
 export const DEFAULT_SETTINGS: Settings = {
   shiftStartMinute: 8 * 60,
@@ -7,7 +7,9 @@ export const DEFAULT_SETTINGS: Settings = {
   noScheduleDepartments: ['Agency\\Cleaner'],
   workdays: [1, 2, 3, 4, 5],
   holidays: ['2026-09-09', '2026-11-06'],
+  shortDays: {},
   lunch: null,
+  lowAttendancePercent: 25,
 };
 
 export const IMPORT_RULES: ImportRules = {
@@ -26,6 +28,11 @@ export function normalizeSettings(raw: unknown): Settings {
     noScheduleDepartments: arr(r.noScheduleDepartments, DEFAULT_SETTINGS.noScheduleDepartments),
     workdays: arr(r.workdays, DEFAULT_SETTINGS.workdays),
     holidays: arr(r.holidays, DEFAULT_SETTINGS.holidays),
+    shortDays: r.shortDays && typeof r.shortDays === 'object' ? (r.shortDays as Record<string, number>) : {},
+    lowAttendancePercent: Math.min(
+      100,
+      Math.max(0, num(r.lowAttendancePercent, DEFAULT_SETTINGS.lowAttendancePercent)),
+    ),
     lunch:
       r.lunch &&
       typeof r.lunch === 'object' &&
@@ -34,4 +41,11 @@ export function normalizeSettings(raw: unknown): Settings {
         ? { startMinute: r.lunch.startMinute, endMinute: r.lunch.endMinute }
         : null,
   };
+}
+
+/** Подставляет праздники и сокращённые дни из таблицы праздников. */
+export function withHolidays(s: Settings, holidays: Holiday[]): Settings {
+  const shortDays: Record<string, number> = {};
+  for (const h of holidays) if (h.kind === 'short' && h.endMinute !== null) shortDays[h.date] = h.endMinute;
+  return { ...s, holidays: holidays.filter((h) => h.kind === 'holiday').map((h) => h.date), shortDays };
 }

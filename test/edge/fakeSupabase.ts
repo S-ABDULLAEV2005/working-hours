@@ -4,6 +4,7 @@ type Row = Record<string, unknown>;
 export const store = {
   users: [] as { id: string; email: string; password: string; created_at: string; last_sign_in_at: string | null }[],
   profiles: [] as Row[],
+  employees: [] as Row[],
   tokens: new Map<string, string>(), // token → user id
   failProfileInsert: false,
 };
@@ -12,6 +13,7 @@ let seq = 0;
 export function reset() {
   store.users = [];
   store.profiles = [];
+  store.employees = [];
   store.tokens.clear();
   store.failProfileInsert = false;
   seq = 0;

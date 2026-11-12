@@ -1,9 +1,23 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useSearchParams } from 'react-router';
 import clsx from 'clsx';
-import { CalendarRange, FileUp, History, KeyRound, LogOut, Settings2, Users } from 'lucide-react';
+import {
+  CalendarRange,
+  FileUp,
+  History,
+  Inbox,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Settings2,
+  User,
+  Users,
+} from 'lucide-react';
+import { useI18n, type DictKey } from '../i18n';
+import type { Role } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
-import { useAuth, useIsAdmin } from '../lib/auth';
+import { LangSwitch } from './LangSwitch';
 
 export function Mark({ className }: { className?: string }) {
   return (
@@ -23,21 +37,32 @@ export function Mark({ className }: { className?: string }) {
   );
 }
 
+const ROLE_LABEL: Record<Role, DictKey> = {
+  admin: 'role.admin',
+  rohbar: 'role.rohbar',
+  viewer: 'role.viewer',
+  korgar: 'role.korgar',
+};
+
 export function AppShell() {
-  const { profile, api } = useAuth();
-  const admin = useIsAdmin();
+  const { profile, api, recovery, clearRecovery } = useAuth();
+  const { t } = useI18n();
+  const role = profile?.role ?? 'viewer';
   const [params] = useSearchParams();
-  const [pwOpen, setPwOpen] = useState(false);
   const m = params.get('m');
   const keep = m ? `?m=${m}` : '';
+  const [pwOpen, setPwOpen] = useState(false);
 
   const nav = [
-    { to: `/${keep}`, label: 'Табель', icon: CalendarRange, show: true, end: true },
-    { to: '/upload', label: 'Загрузка файла', icon: FileUp, show: admin },
-    { to: '/history', label: 'История загрузок', icon: History, show: admin },
-    { to: '/settings', label: 'Настройки графика', icon: Settings2, show: admin },
-    { to: '/users', label: 'Пользователи', icon: Users, show: admin },
-  ].filter((n) => n.show);
+    { to: '/me' + keep, label: t('nav.me'), icon: User, roles: ['korgar'] },
+    { to: '/today', label: t('nav.today'), icon: LayoutDashboard, roles: ['admin', 'rohbar', 'viewer'] },
+    { to: '/tabel' + keep, label: t('nav.tabel'), icon: CalendarRange, roles: ['admin', 'rohbar', 'viewer'] },
+    { to: '/absences', label: t('nav.absences'), icon: Inbox, roles: ['admin', 'rohbar', 'viewer'] },
+    { to: '/upload', label: t('nav.upload'), icon: FileUp, roles: ['admin'] },
+    { to: '/history', label: t('nav.history'), icon: History, roles: ['admin'] },
+    { to: '/settings', label: t('nav.settings'), icon: Settings2, roles: ['admin'] },
+    { to: '/users', label: t('nav.users'), icon: Users, roles: ['admin'] },
+  ].filter((n) => n.roles.includes(role));
 
   const link = ({ isActive }: { isActive: boolean }) =>
     clsx(
@@ -48,7 +73,7 @@ export function AppShell() {
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[236px_1fr]">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-surface focus:p-2">
-        Перейти к содержимому
+        {t('a11y.skip')}
       </a>
       <aside className="sticky top-0 z-30 border-b border-rule bg-surface lg:h-dvh lg:border-r lg:border-b-0">
         <div className="flex h-full flex-col">
@@ -56,30 +81,31 @@ export function AppShell() {
             <div className="flex items-center gap-2.5">
               <Mark className="size-8 shrink-0" />
               <div className="leading-tight">
-                <p className="text-[15px] font-semibold">Учёт времени</p>
-                <p className="text-xs text-muted">по камерам FaceID</p>
+                <p className="text-[15px] font-semibold">{t('app.short')}</p>
+                <p className="text-xs text-muted">{t('app.tagline')}</p>
               </div>
             </div>
-            <div className="flex lg:hidden">
+            <div className="flex items-center gap-1 lg:hidden">
+              <LangSwitch />
               <button
                 onClick={() => setPwOpen(true)}
                 className="rounded-md p-2 text-muted hover:bg-hover hover:text-ink"
-                aria-label="Сменить пароль"
+                aria-label={t('pw.title')}
               >
                 <KeyRound className="size-4" />
               </button>
               <button
                 onClick={() => api.signOut()}
                 className="rounded-md p-2 text-muted hover:bg-hover hover:text-ink"
-                aria-label="Выйти"
+                aria-label={t('nav.logout')}
               >
                 <LogOut className="size-4" />
               </button>
             </div>
           </div>
-          <nav className="flex gap-1 overflow-x-auto px-3 pb-2 lg:flex-col lg:px-3 lg:pb-0" aria-label="Разделы">
+          <nav className="flex gap-1 overflow-x-auto px-3 pb-2 lg:flex-col lg:pb-0" aria-label={t('a11y.nav')}>
             {nav.map((n) => (
-              <NavLink key={n.label} to={n.to} end={n.end} className={link}>
+              <NavLink key={n.label} to={n.to} className={link}>
                 <n.icon className="size-4 shrink-0" aria-hidden />
                 {n.label}
               </NavLink>
@@ -89,29 +115,41 @@ export function AppShell() {
             <p className="truncate text-sm font-medium" title={profile?.email}>
               {profile?.fullName}
             </p>
-            <p className="text-xs text-muted">{admin ? 'Администратор' : 'Только просмотр'}</p>
-            {api.demo && <p className="mt-2 text-xs text-single">Демо-режим: данные не сохраняются</p>}
+            <p className="text-xs text-muted">
+              {t(ROLE_LABEL[role])}
+              {role === 'korgar' && profile?.employeeId && ` · ID ${profile.employeeId}`}
+            </p>
+            {api.demo && <p className="mt-2 text-xs text-single">{t('app.demo')}</p>}
             <div className="mt-3 -ml-2 flex flex-col items-start">
               <button
                 onClick={() => setPwOpen(true)}
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-ink"
               >
-                <KeyRound className="size-4" aria-hidden /> Сменить пароль
+                <KeyRound className="size-4" aria-hidden /> {t('pw.title')}
               </button>
               <button
                 onClick={() => api.signOut()}
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-ink"
               >
-                <LogOut className="size-4" aria-hidden /> Выйти
+                <LogOut className="size-4" aria-hidden /> {t('nav.logout')}
               </button>
             </div>
           </div>
         </div>
       </aside>
-      <main id="main" className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
-        <Outlet />
-      </main>
-      <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
+      <div className="min-w-0">
+        <div className="hidden justify-end px-10 pt-5 lg:flex">
+          <LangSwitch />
+        </div>
+        <main id="main" className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:pt-2 lg:pb-9">
+          <Outlet />
+        </main>
+      </div>
+      <ChangePasswordDialog
+        open={pwOpen || recovery}
+        recovery={recovery}
+        onClose={() => (recovery ? clearRecovery() : setPwOpen(false))}
+      />
     </div>
   );
 }

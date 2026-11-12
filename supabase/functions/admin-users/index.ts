@@ -10,7 +10,16 @@
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-type Role = 'admin' | 'viewer';
+type Role = 'admin' | 'rohbar' | 'viewer' | 'korgar';
+const STAFF_ROLES: Role[] = ['admin', 'rohbar', 'viewer'];
+
+/**
+ * Сотрудники (Коргар) входят по ID из FaceID. Внутри Supabase им нужен email,
+ * поэтому он строится как <ID>@<домен>. Писем на этот адрес не отправляется.
+ * Если меняете домен — поменяйте и VITE_KORGAR_LOGIN_DOMAIN на сайте.
+ */
+const KORGAR_DOMAIN = Deno.env.get('KORGAR_LOGIN_DOMAIN') ?? 'staff.davomot.tj';
+const korgarEmail = (employeeId: string) => `${employeeId.toLowerCase()}@${KORGAR_DOMAIN}`;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -55,8 +64,8 @@ function generatePassword(length = 12): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const asRole = (v: unknown): Role => {
-  if (v === 'admin' || v === 'viewer') return v;
-  throw new HttpError(400, 'Роль должна быть admin или viewer.');
+  if (v === 'admin' || v === 'rohbar' || v === 'viewer' || v === 'korgar') return v;
+  throw new HttpError(400, 'Неизвестная роль.');
 };
 const asText = (v: unknown, field: string, max = 120): string => {
   const s = typeof v === 'string' ? v.trim() : '';
@@ -98,6 +107,28 @@ export async function handle(req: Request): Promise<Response> {
       return id;
     };
 
+    /** Аккаунт сотрудника по ID из FaceID: логин = ID, пароль генерируется. */
+    const createKorgar = async (employeeId: string) => {
+      const { data: emp } = await admin.from('employees').select('employee_id, name').eq('employee_id', employeeId).maybeSingle();
+      if (!emp) throw new HttpError(404, `Сотрудник с ID ${employeeId} не найден в загруженных данных.`);
+      const { data: linked } = await admin.from('profiles').select('user_id').eq('employee_id', employeeId).maybeSingle();
+      if (linked) throw new HttpError(409, `У сотрудника ID ${employeeId} уже есть аккаунт.`);
+      const password = generatePassword();
+      const { data, error } = await admin.auth.admin.createUser({ email: korgarEmail(employeeId), password, email_confirm: true });
+      if (error) {
+        if (/already|registered|exists/i.test(error.message)) throw new HttpError(409, `У сотрудника ID ${employeeId} уже есть аккаунт.`);
+        throw new HttpError(400, error.message);
+      }
+      const { error: pErr } = await admin
+        .from('profiles')
+        .insert({ user_id: data.user.id, full_name: emp.name, role: 'korgar', employee_id: employeeId });
+      if (pErr) {
+        await admin.auth.admin.deleteUser(data.user.id);
+        throw new HttpError(500, pErr.message);
+      }
+      return { userId: data.user.id, name: emp.name as string, login: employeeId, password };
+    };
+
     switch (action) {
       case 'list': {
         const users: { id: string; email: string; createdAt: string; lastSignInAt: string | null }[] = [];
@@ -114,21 +145,36 @@ export async function handle(req: Request): Promise<Response> {
           );
           if (data.users.length < 1000) break;
         }
-        const { data: profiles, error } = await admin.from('profiles').select('user_id, full_name, role');
+        const { data: profiles, error } = await admin.from('profiles').select('user_id, full_name, role, employee_id');
         if (error) throw new HttpError(500, error.message);
         const byId = new Map(profiles.map((p) => [p.user_id, p]));
         // Показываем только тех, у кого есть доступ к платформе.
         const list = users
           .filter((u) => byId.has(u.id))
-          .map((u) => ({ ...u, fullName: byId.get(u.id)!.full_name, role: byId.get(u.id)!.role, isMe: u.id === me }));
+          .map((u) => {
+            const p = byId.get(u.id)!;
+            return {
+              ...u,
+              fullName: p.full_name,
+              role: p.role,
+              employeeId: p.employee_id ?? null,
+              login: p.role === 'korgar' && p.employee_id ? p.employee_id : u.email,
+              isMe: u.id === me,
+            };
+          });
         return json(200, { users: list });
       }
 
       case 'create': {
+        const role = asRole(body.role);
+        if (role === 'korgar') {
+          const res = await createKorgar(asText(body.employeeId, 'Сотрудник', 64));
+          return json(200, { userId: res.userId, email: res.login, login: res.login, password: res.password });
+        }
         const fullName = asText(body.fullName, 'ФИО');
         const email = asText(body.email, 'Email', 254).toLowerCase();
         if (!EMAIL_RE.test(email)) throw new HttpError(400, 'Неверный формат email.');
-        const role = asRole(body.role);
+        if (email.endsWith(`@${KORGAR_DOMAIN}`)) throw new HttpError(400, 'Этот домен зарезервирован для входа сотрудников по ID.');
         const password = generatePassword();
         const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
         if (error) {
@@ -142,12 +188,36 @@ export async function handle(req: Request): Promise<Response> {
           await admin.auth.admin.deleteUser(data.user.id); // не оставляем «полусозданного» пользователя
           throw new HttpError(500, pErr.message);
         }
-        return json(200, { userId: data.user.id, email, password });
+        return json(200, { userId: data.user.id, email, login: email, password });
+      }
+
+      case 'createKorgarBulk': {
+        const ids: unknown = body.employeeIds;
+        if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, 'Не выбраны сотрудники.');
+        if (ids.length > 500) throw new HttpError(400, 'За один раз можно создать не больше 500 аккаунтов.');
+        const created: { employeeId: string; name: string; login: string; password: string }[] = [];
+        const failed: { employeeId: string; error: string }[] = [];
+        for (const raw of ids) {
+          const id = typeof raw === 'string' ? raw.trim() : '';
+          if (!id) continue;
+          try {
+            const r = await createKorgar(id);
+            created.push({ employeeId: id, name: r.name, login: r.login, password: r.password });
+          } catch (e) {
+            failed.push({ employeeId: id, error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        return json(200, { created, failed });
       }
 
       case 'setRole': {
         const id = targetId();
         const role = asRole(body.role);
+        const { data: cur } = await admin.from('profiles').select('role').eq('user_id', id).maybeSingle();
+        if (cur?.role === 'korgar' || role === 'korgar') {
+          throw new HttpError(400, 'Роль сотрудника (Коргар) не меняется: создайте отдельный аккаунт.');
+        }
+        if (!STAFF_ROLES.includes(role)) throw new HttpError(400, 'Неизвестная роль.');
         const { data, error } = await admin.from('profiles').update({ role }).eq('user_id', id).select('user_id');
         if (error) throw new HttpError(500, error.message);
         if (!data?.length) throw new HttpError(404, 'Пользователь не найден.');
@@ -168,6 +238,29 @@ export async function handle(req: Request): Promise<Response> {
         const { error } = await admin.auth.admin.updateUserById(id, { password });
         if (error) throw new HttpError(400, error.message);
         return json(200, { password });
+      }
+
+      case 'resetPasswordsBulk': {
+        // Новые пароли сразу многим сотрудникам (Коргар). Только Коргар — массово менять пароли админам нельзя.
+        const ids: unknown = body.userIds;
+        if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, 'Не выбраны пользователи.');
+        if (ids.length > 100) throw new HttpError(400, 'За один раз — не больше 100 пользователей.');
+        const created: { employeeId: string; name: string; login: string; password: string }[] = [];
+        const failed: { employeeId: string; error: string }[] = [];
+        for (const raw of ids) {
+          const id = typeof raw === 'string' ? raw : '';
+          const { data: p } = await admin.from('profiles').select('role, full_name, employee_id').eq('user_id', id).maybeSingle();
+          const label = (p?.employee_id as string) ?? id;
+          if (!p || p.role !== 'korgar' || !p.employee_id) {
+            failed.push({ employeeId: label, error: 'Не сотрудник (Коргар).' });
+            continue;
+          }
+          const password = generatePassword();
+          const { error } = await admin.auth.admin.updateUserById(id, { password });
+          if (error) failed.push({ employeeId: label, error: error.message });
+          else created.push({ employeeId: p.employee_id, name: p.full_name, login: p.employee_id, password });
+        }
+        return json(200, { created, failed });
       }
 
       case 'delete': {

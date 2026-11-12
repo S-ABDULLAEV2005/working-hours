@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { readSheet } from 'read-excel-file/node';
@@ -5,7 +6,7 @@ import { DEFAULT_SETTINGS, evaluateDays, importRows, summarize } from '../src/co
 
 // Реальная выгрузка НЕ хранится в репозитории (персональные данные).
 // Чтобы запустить тест, положите файл в web/fixtures/real.xlsx.
-const FILE = new URL('../fixtures/real.xlsx', import.meta.url).pathname;
+const FILE = fileURLToPath(new URL('../fixtures/real.xlsx', import.meta.url));
 
 describe.skipIf(!existsSync(FILE))('реальная выгрузка FaceID (та же библиотека, что в браузере)', () => {
   it('разбирается без потерь; октябрь совпадает со сверенным отчётом', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { Loader2, X } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -31,7 +32,9 @@ export function Button({
   );
 }
 
-export function Spinner({ label = 'Загрузка…' }: { label?: string }) {
+export function Spinner({ label }: { label?: string }) {
+  const { t } = useI18n();
+  label ??= t('common.loading');
   return (
     <div role="status" className="flex items-center gap-2 py-16 text-sm text-muted justify-center">
       <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -98,6 +101,7 @@ export function ConfirmDialog({
   title,
   children,
   confirmLabel,
+  cancelLabel,
   danger,
   loading,
   onConfirm,
@@ -107,11 +111,13 @@ export function ConfirmDialog({
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  cancelLabel?: string;
   danger?: boolean;
   loading?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -135,7 +141,7 @@ export function ConfirmDialog({
             onClick={onClose}
             disabled={loading}
             className="rounded p-1 text-muted hover:bg-hover"
-            aria-label="Закрыть"
+            aria-label={t('common.close')}
           >
             <X className="size-4" />
           </button>
@@ -143,7 +149,7 @@ export function ConfirmDialog({
         <div className="mt-2 text-sm text-muted">{children}</div>
         <div className="mt-6 flex justify-end gap-2">
           <Button onClick={onClose} disabled={loading}>
-            Отмена
+            {cancelLabel ?? t('common.cancel')}
           </Button>
           <Button variant={danger ? 'danger' : 'primary'} loading={loading} onClick={onConfirm}>
             {confirmLabel}

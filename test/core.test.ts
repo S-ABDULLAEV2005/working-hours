@@ -242,6 +242,8 @@ describe('итоги месяца', () => {
       lateCount: 1,
       minutesLate: 30,
       singleEventDays: 1,
+      minutesOvertime: 0,
+      absenceDays: 0,
     });
     expect(r.period).toEqual({ from: '2026-09-30', to: '2026-10-05', months: ['2026-09', '2026-10'] });
   });

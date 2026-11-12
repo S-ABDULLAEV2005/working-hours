@@ -44,18 +44,30 @@ describe('admin-users', () => {
 
   it('админ создаёт смотрителя: пароль сгенерирован, email подтверждён, роль выдана', async () => {
     addUser('a@x.tj', 'admin', 'ta');
-    const r = await call('ta', { action: 'create', email: ' New@Mail.TJ ', fullName: 'Новый Сотрудник', role: 'viewer' });
+    const r = await call('ta', {
+      action: 'create',
+      email: ' New@Mail.TJ ',
+      fullName: 'Новый Сотрудник',
+      role: 'viewer',
+    });
     expect(r.status).toBe(200);
     expect(r.body.email).toBe('new@mail.tj');
     expect(r.body.password).toMatch(/^[a-zA-Z2-9]{12}$/);
     expect(r.body.password).not.toMatch(/[01OIl]/);
-    expect(store.profiles.find((p) => p.user_id === r.body.userId)).toMatchObject({ role: 'viewer', full_name: 'Новый Сотрудник' });
+    expect(store.profiles.find((p) => p.user_id === r.body.userId)).toMatchObject({
+      role: 'viewer',
+      full_name: 'Новый Сотрудник',
+    });
   });
 
   it('проверка ввода: email, ФИО, роль, дубликат', async () => {
     addUser('a@x.tj', 'admin', 'ta');
-    expect((await call('ta', { action: 'create', email: 'плохой', fullName: 'X', role: 'viewer' })).body.error).toMatch(/email/);
-    expect((await call('ta', { action: 'create', email: 'b@x.tj', fullName: '  ', role: 'viewer' })).body.error).toMatch(/ФИО/);
+    expect((await call('ta', { action: 'create', email: 'плохой', fullName: 'X', role: 'viewer' })).body.error).toMatch(
+      /email/,
+    );
+    expect(
+      (await call('ta', { action: 'create', email: 'b@x.tj', fullName: '  ', role: 'viewer' })).body.error,
+    ).toMatch(/ФИО/);
     expect((await call('ta', { action: 'create', email: 'b@x.tj', fullName: 'B', role: 'root' })).status).toBe(400);
     expect((await call('ta', { action: 'create', email: 'a@x.tj', fullName: 'A', role: 'viewer' })).status).toBe(409);
   });
@@ -102,5 +114,73 @@ describe('admin-users', () => {
   it('неизвестное действие — 400', async () => {
     addUser('a@x.tj', 'admin', 'ta');
     expect((await call('ta', { action: 'hack' })).status).toBe(400);
+  });
+
+  it('создание Коргара: логин = ID, email на служебном домене, ФИО из табеля', async () => {
+    addUser('a@x.tj', 'admin', 'ta');
+    store.employees.push({ employee_id: '313', name: 'Сотрудник А' });
+    const r = await call('ta', { action: 'create', role: 'korgar', employeeId: '313' });
+    expect(r.status).toBe(200);
+    expect(r.body.login).toBe('313');
+    expect(store.users.find((u) => u.id === r.body.userId)!.email).toBe('313@staff.davomot.tj');
+    expect(store.profiles.find((p) => p.user_id === r.body.userId)).toMatchObject({
+      role: 'korgar',
+      employee_id: '313',
+      full_name: 'Сотрудник А',
+    });
+    const again = await call('ta', { action: 'create', role: 'korgar', employeeId: '313' });
+    expect(again.status).toBe(409);
+    expect((await call('ta', { action: 'create', role: 'korgar', employeeId: '999' })).status).toBe(404);
+  });
+
+  it('массовое создание: созданные + ошибки по каждому, пароли разные', async () => {
+    addUser('a@x.tj', 'admin', 'ta');
+    store.employees.push(
+      { employee_id: '1', name: 'А' },
+      { employee_id: '2', name: 'Б' },
+      { employee_id: '3', name: 'В' },
+    );
+    await call('ta', { action: 'create', role: 'korgar', employeeId: '3' });
+    const r = await call('ta', { action: 'createKorgarBulk', employeeIds: ['1', '2', '3', '404'] });
+    expect(r.body.created.map((c: { login: string }) => c.login)).toEqual(['1', '2']);
+    expect(new Set(r.body.created.map((c: { password: string }) => c.password)).size).toBe(2);
+    expect(r.body.failed.map((f: { employeeId: string }) => f.employeeId)).toEqual(['3', '404']);
+  });
+
+  it('роль Коргара не меняется и никого нельзя сделать Коргаром через смену роли', async () => {
+    addUser('a@x.tj', 'admin', 'ta');
+    store.employees.push({ employee_id: '313', name: 'А' });
+    const k = (await call('ta', { action: 'create', role: 'korgar', employeeId: '313' })).body.userId;
+    const v = addUser('v@x.tj', 'viewer');
+    expect((await call('ta', { action: 'setRole', userId: k, role: 'admin' })).status).toBe(400);
+    expect((await call('ta', { action: 'setRole', userId: v, role: 'korgar' })).status).toBe(400);
+    expect((await call('ta', { action: 'setRole', userId: v, role: 'rohbar' })).status).toBe(200);
+  });
+
+  it('Рохбар не может управлять пользователями', async () => {
+    addUser('r@x.tj', 'rohbar' as 'admin', 'tr');
+    expect((await call('tr', { action: 'list' })).status).toBe(403);
+  });
+
+  it('email на служебном домене нельзя занять вручную', async () => {
+    addUser('a@x.tj', 'admin', 'ta');
+    expect(
+      (await call('ta', { action: 'create', role: 'viewer', fullName: 'X', email: '313@staff.davomot.tj' })).status,
+    ).toBe(400);
+  });
+
+  it('массовая выдача новых паролей — только Коргарам', async () => {
+    addUser('a@x.tj', 'admin', 'ta');
+    store.employees.push({ employee_id: '1', name: 'А' }, { employee_id: '2', name: 'Б' });
+    const bulk = await call('ta', { action: 'createKorgarBulk', employeeIds: ['1', '2'] });
+    const ids = store.profiles.filter((p) => p.role === 'korgar').map((p) => p.user_id);
+    const old = store.users.filter((u) => ids.includes(u.id)).map((u) => u.password);
+    const v = addUser('v@x.tj', 'viewer');
+    const r = await call('ta', { action: 'resetPasswordsBulk', userIds: [...ids, v] });
+    expect(r.body.created.map((c: { login: string }) => c.login).sort()).toEqual(['1', '2']);
+    expect(r.body.failed).toHaveLength(1);
+    const now = store.users.filter((u) => ids.includes(u.id)).map((u) => u.password);
+    expect(now).not.toEqual(old);
+    expect(bulk.body.created).toHaveLength(2);
   });
 });

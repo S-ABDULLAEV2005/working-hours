@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from './ui';
+import { useErrorText, useI18n } from '../i18n';
 import { useApi } from '../lib/auth';
+import { Button } from './ui';
 
-/** Смена своего пароля — доступна любому вошедшему пользователю. */
-export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Смена своего пароля. recovery — пользователь пришёл по ссылке из письма. */
+export function ChangePasswordDialog({
+  open,
+  onClose,
+  recovery,
+}: {
+  open: boolean;
+  onClose: () => void;
+  recovery?: boolean;
+}) {
   const api = useApi();
+  const { t } = useI18n();
+  const errText = useErrorText();
   const ref = useRef<HTMLDialogElement>(null);
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -28,16 +39,16 @@ export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (pw.length < 10) return setError('Пароль должен быть не короче 10 символов.');
-    if (!/\d/.test(pw) || !/\p{L}/u.test(pw)) return setError('В пароле должны быть и буквы, и цифры.');
-    if (pw !== pw2) return setError('Пароли не совпадают.');
+    if (pw.length < 10) return setError(t('pw.errShort'));
+    if (!/\d/.test(pw) || !/\p{L}/u.test(pw)) return setError(t('pw.errMix'));
+    if (pw !== pw2) return setError(t('pw.errMatch'));
     setSaving(true);
     try {
       await api.changeOwnPassword(pw);
-      toast.success('Пароль изменён', { description: 'В следующий раз входите с новым паролем.' });
+      toast.success(t('pw.changed'), { description: t('pw.changedHint') });
       onClose();
     } catch (err) {
-      setError((err as Error).message);
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
@@ -48,24 +59,26 @@ export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose
     <dialog
       ref={ref}
       onClose={onClose}
-      onCancel={(e) => saving && e.preventDefault()}
+      onCancel={(e) => (saving || recovery) && e.preventDefault()}
       className="m-auto w-[min(420px,calc(100vw-2rem))] rounded-xl border border-rule bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/30"
     >
       <form onSubmit={submit} className="p-6" noValidate>
         <div className="mb-4 flex items-start justify-between">
-          <h2 className="text-lg font-semibold">Сменить пароль</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded p-1 text-muted hover:bg-hover"
-            aria-label="Закрыть"
-          >
-            <X className="size-4" />
-          </button>
+          <h2 className="text-lg font-semibold">{recovery ? t('pw.recoveryTitle') : t('pw.title')}</h2>
+          {!recovery && (
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded p-1 text-muted hover:bg-hover"
+              aria-label={t('common.close')}
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
         <label className="block text-sm font-medium" htmlFor="np1">
-          Новый пароль
+          {t('pw.new')}
         </label>
         <input
           id="np1"
@@ -75,9 +88,9 @@ export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose
           onChange={(e) => setPw(e.target.value)}
           className={field}
         />
-        <p className="mt-1 text-xs text-muted">Не короче 10 символов, буквы и цифры.</p>
+        <p className="mt-1 text-xs text-muted">{t('pw.rules')}</p>
         <label className="mt-4 block text-sm font-medium" htmlFor="np2">
-          Повторите пароль
+          {t('pw.repeat')}
         </label>
         <input
           id="np2"
@@ -93,11 +106,13 @@ export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose
           </p>
         )}
         <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" onClick={onClose} disabled={saving}>
-            Отмена
-          </Button>
+          {!recovery && (
+            <Button type="button" onClick={onClose} disabled={saving}>
+              {t('common.cancel')}
+            </Button>
+          )}
           <Button type="submit" variant="primary" loading={saving}>
-            Сохранить пароль
+            {t('pw.save')}
           </Button>
         </div>
       </form>
